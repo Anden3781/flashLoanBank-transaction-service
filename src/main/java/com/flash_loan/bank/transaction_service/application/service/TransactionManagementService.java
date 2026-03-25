@@ -16,6 +16,8 @@ import io.reactivex.rxjava3.core.Maybe;
 import io.reactivex.rxjava3.core.Single;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -32,6 +34,8 @@ public class TransactionManagementService {
     private static final BigDecimal CHECKING_FEE = new BigDecimal("2.50");
     private static final BigDecimal SAVINGS_LIMIT_FEE = new BigDecimal("5.00");
 
+    @CircuitBreaker(name = "transactionService", fallbackMethod = "fallbackExecuteTransaction")
+    @TimeLimiter(name = "transactionService")
     public Single<Transaction> executeTransaction(TransactionRequest command) {
         return accountPort.getAccountById(command.getAccountId())
                 .switchIfEmpty(Maybe.error(new AccountNotFoundException("Account does not exist: " + command.getAccountId())))
@@ -40,6 +44,11 @@ public class TransactionManagementService {
                 .flatMapSingle(transactionRepository::save)
                 .flatMapSingle(this::processRemoteUpdate)
                 .toSingle();
+    }
+
+    public Single<Transaction> fallbackExecuteTransaction(TransactionRequest command, Throwable t) {
+        log.error("Circuit breaker active for executeTransaction: {}", t.getMessage());
+        return Single.error(new RuleViolationException("Servicio temporalmente no disponible, reintente en unos segundos"));
     }
 
     private Maybe<AccountInfo> validateFixedTerm(AccountInfo account) {

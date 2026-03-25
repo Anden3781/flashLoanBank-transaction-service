@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 public class Transaction {
     private String id;
     private String accountId;
+    private String transferId;
     private BigDecimal amount;
     private BigDecimal feeApplied;
     private TransactionType type;
