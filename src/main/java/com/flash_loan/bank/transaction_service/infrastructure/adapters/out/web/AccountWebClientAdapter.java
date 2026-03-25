@@ -7,7 +7,6 @@ import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.core.Maybe;
 import io.reactivex.rxjava3.core.Single;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -16,7 +15,6 @@ import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
 
 @Component
-@Primary
 public class AccountWebClientAdapter implements AccountValidationPort {
 
     private final WebClient webClient;
