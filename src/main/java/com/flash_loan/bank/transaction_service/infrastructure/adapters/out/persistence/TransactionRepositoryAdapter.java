@@ -28,4 +28,21 @@ public class TransactionRepositoryAdapter implements TransactionRepositoryPort {
         return Flowable.fromPublisher(repository.findByAccountId(accountId))
                 .map(mapper::toDomain);
     }
+
+    @Override
+    public Flowable<Transaction> findAll() {
+        return Flowable.fromPublisher(repository.findAll())
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public io.reactivex.rxjava3.core.Maybe<Transaction> findById(String id) {
+        return io.reactivex.rxjava3.core.Maybe.fromPublisher(repository.findById(id))
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public Single<Boolean> deleteById(String id) {
+        return Single.fromPublisher(repository.deleteById(id).thenReturn(true).defaultIfEmpty(false));
+    }
 }

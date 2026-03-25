@@ -4,34 +4,38 @@ import com.flash_loan.bank.transaction_service.domain.model.Transaction;
 import com.flash_loan.bank.transaction_service.infrastructure.adapters.out.persistence.entity.TransactionEntity;
 import org.springframework.stereotype.Component;
 
+import java.util.Optional;
+
 @Component
 public class TransactionPersistenceMapper {
 
     public TransactionEntity toEntity(Transaction domain) {
-        if (domain == null) return null;
-        return TransactionEntity.builder()
-                .id(domain.getId())
-                .accountId(domain.getAccountId())
-                .amount(domain.getAmount())
-                .feeApplied(domain.getFeeApplied())
-                .type(domain.getType())
-                .timestamp(domain.getTimestamp())
-                .resultingBalance(domain.getResultingBalance())
-                .status(domain.getStatus())
-                .build();
+        return Optional.ofNullable(domain)
+                .map(d -> TransactionEntity.builder()
+                        .id(d.getId())
+                        .accountId(d.getAccountId())
+                        .amount(d.getAmount())
+                        .feeApplied(d.getFeeApplied())
+                        .type(d.getType())
+                        .timestamp(d.getTimestamp())
+                        .resultingBalance(d.getResultingBalance())
+                        .status(d.getStatus())
+                        .build())
+                .orElse(null);
     }
 
     public Transaction toDomain(TransactionEntity entity) {
-        if (entity == null) return null;
-        return Transaction.builder()
-                .id(entity.getId())
-                .accountId(entity.getAccountId())
-                .amount(entity.getAmount())
-                .feeApplied(entity.getFeeApplied())
-                .type(entity.getType())
-                .timestamp(entity.getTimestamp())
-                .resultingBalance(entity.getResultingBalance())
-                .status(entity.getStatus())
-                .build();
+        return Optional.ofNullable(entity)
+                .map(e -> Transaction.builder()
+                        .id(e.getId())
+                        .accountId(e.getAccountId())
+                        .amount(e.getAmount())
+                        .feeApplied(e.getFeeApplied())
+                        .type(e.getType())
+                        .timestamp(e.getTimestamp())
+                        .resultingBalance(e.getResultingBalance())
+                        .status(e.getStatus())
+                        .build())
+                .orElse(null);
     }
 }

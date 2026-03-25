@@ -35,54 +35,51 @@ public class TransactionManagementService {
     public Single<Transaction> executeTransaction(TransactionRequest command) {
         return accountPort.getAccountById(command.getAccountId())
                 .switchIfEmpty(Maybe.error(new AccountNotFoundException("Account does not exist: " + command.getAccountId())))
+                .flatMap(this::validateFixedTerm)
+                .flatMap(account -> createTransaction(account, command))
+                .flatMapSingle(transactionRepository::save)
+                .flatMapSingle(this::processRemoteUpdate)
+                .toSingle();
+    }
+
+    private Maybe<AccountInfo> validateFixedTerm(AccountInfo account) {
+        return Maybe.just(account)
+                .filter(acc -> acc.getType() != AccountType.FIXED_TERM || LocalDateTime.now().getDayOfMonth() == acc.getAllowedTransactionDay())
+                .switchIfEmpty(Maybe.error(new RuleViolationException("Fixed term accounts can only operate on day " + account.getAllowedTransactionDay())));
+    }
+
+    private Maybe<Transaction> createTransaction(AccountInfo account, TransactionRequest command) {
+        BigDecimal fee = calculateFee(account);
+        BigDecimal impact = command.getType() == TransactionType.DEPOSIT
+                ? command.getAmount().subtract(fee)
+                : command.getAmount().negate().subtract(fee);
+
+        BigDecimal newBalance = account.getBalance().add(impact);
+
+        return Maybe.just(newBalance)
+                .filter(balance -> balance.compareTo(BigDecimal.ZERO) >= 0)
+                .switchIfEmpty(Maybe.error(new RuleViolationException("Insufficient funds after applying fees (Resulting Balance: " + newBalance + ")")))
+                .map(balance -> Transaction.builder()
+                        .accountId(command.getAccountId())
+                        .amount(command.getAmount())
+                        .feeApplied(fee)
+                        .type(command.getType())
+                        .timestamp(LocalDateTime.now())
+                        .resultingBalance(balance)
+                        .status(TransactionStatus.PENDING)
+                        .build());
+    }
+
+    private Single<Transaction> processRemoteUpdate(Transaction savedTx) {
+        return accountPort.updateAccountBalance(savedTx.getAccountId(), savedTx.getResultingBalance())
+                .filter(success -> success)
+                .flatMap(success -> transactionRepository.save(savedTx.toBuilder().status(TransactionStatus.SUCCESS).build()).toMaybe())
+                .switchIfEmpty(markAsFailed(savedTx, "Remote balance update rejected by account-service").toMaybe())
                 .toSingle()
-                .flatMap(account -> {
-                    if (account.getType() == AccountType.FIXED_TERM) {
-                        int expectedDay = account.getAllowedTransactionDay();
-                        int currentDay = LocalDateTime.now().getDayOfMonth();
-                        if (currentDay != expectedDay) {
-                            return Single.error(new RuleViolationException("Fixed term accounts can only operate on day " + expectedDay));
-                        }
-                    }
-                    return Single.just(account);
-                })
-                .flatMap(account -> {
-                    BigDecimal fee = calculateFee(account);
-                    BigDecimal impact = command.getType() == TransactionType.DEPOSIT
-                            ? command.getAmount().subtract(fee)
-                            : command.getAmount().negate().subtract(fee);
-
-                    BigDecimal newBalance = account.getBalance().add(impact);
-
-                    if (newBalance.compareTo(BigDecimal.ZERO) < 0) {
-                        return Single.error(new RuleViolationException("Insufficient funds after applying fees (Resulting Balance: " + newBalance + ")"));
-                    }
-
-                    Transaction tx = Transaction.builder()
-                            .accountId(command.getAccountId())
-                            .amount(command.getAmount())
-                            .feeApplied(fee)
-                            .type(command.getType())
-                            .timestamp(LocalDateTime.now())
-                            .resultingBalance(newBalance)
-                            .status(TransactionStatus.PENDING)
-                            .build();
-
-                    return Single.just(tx);
-                })
-                .flatMap(transactionRepository::save)
-                .flatMap(savedTx -> accountPort.updateAccountBalance(savedTx.getAccountId(), savedTx.getResultingBalance())
-                        .flatMap(success -> {
-                            if (!success) {
-                                return markAsFailed(savedTx, "Remote balance update rejected by account-service");
-                            }
-                            return transactionRepository.save(savedTx.toBuilder().status(TransactionStatus.SUCCESS).build());
-                        })
-                        .onErrorResumeNext(error -> {
-                            log.error("Distributed Transaction Failed. Executing Compensating Action for Transaction: {}", savedTx.getId(), error);
-                            return markAsFailed(savedTx, error.getMessage());
-                        })
-                );
+                .onErrorResumeNext(error -> {
+                    log.error("Distributed Transaction Failed. Executing Compensating Action for Transaction: {}", savedTx.getId(), error);
+                    return markAsFailed(savedTx, error.getMessage());
+                });
     }
 
     public Flowable<Transaction> findAll() {
@@ -91,7 +88,8 @@ public class TransactionManagementService {
 
     public Single<Transaction> findById(String id) {
         return transactionRepository.findById(id)
-                .switchIfEmpty(Single.error(new RuleViolationException("Transaction not found: " + id)));
+                .switchIfEmpty(Maybe.error(new RuleViolationException("Transaction not found: " + id)))
+                .toSingle();
     }
 
     public Flowable<Transaction> getTransactionsByAccountId(String accountId) {
@@ -100,23 +98,21 @@ public class TransactionManagementService {
 
     public Completable deleteTransaction(String id) {
         return transactionRepository.deleteById(id)
-                .flatMapCompletable(success -> {
-                    if (!success) {
-                        return Completable.error(new RuleViolationException("Transaction not found for deletion: " + id));
-                    }
-                    return Completable.complete();
-                });
+                .filter(success -> success)
+                .switchIfEmpty(Maybe.error(new RuleViolationException("Transaction not found for deletion: " + id)))
+                .ignoreElement();
     }
 
     private BigDecimal calculateFee(AccountInfo account) {
-        if (account.getType() == AccountType.CHECKING) {
-            return CHECKING_FEE;
-        } else if (account.getType() == AccountType.SAVINGS) {
-            if (account.getCurrentMovements() != null && account.getCurrentMovements() >= account.getMaxMonthlyMovements()) {
-                return SAVINGS_LIMIT_FEE;
-            }
-        }
-        return BigDecimal.ZERO;
+        return java.util.Optional.ofNullable(account.getType())
+                .filter(type -> type == AccountType.CHECKING)
+                .map(unused -> CHECKING_FEE)
+                .or(() -> java.util.Optional.ofNullable(account.getType())
+                        .filter(type -> type == AccountType.SAVINGS)
+                        .filter(unused -> account.getCurrentMovements() != null)
+                        .filter(unused -> account.getCurrentMovements() >= account.getMaxMonthlyMovements())
+                        .map(unused -> SAVINGS_LIMIT_FEE))
+                .orElse(BigDecimal.ZERO);
     }
 
     private Single<Transaction> markAsFailed(Transaction tx, String reason) {

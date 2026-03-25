@@ -9,7 +9,7 @@ spring:
       enabled: false
   data:
     mongodb:
-      uri: mongodb://root:rootpassword@localhost:27017/transaction_db?authSource=admin
+      uri: mongodb://localhost:27017/transaction_db
       auto-index-creation: true
 
 # Puertos de los hermanos para la comunicación interna
