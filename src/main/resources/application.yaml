@@ -18,3 +18,14 @@ services:
     url: http://localhost:8082
   customer:
     url: http://localhost:8081
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka/
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
