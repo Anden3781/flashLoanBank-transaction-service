@@ -30,7 +30,7 @@ public class AccountWebClientAdapter implements AccountValidationPort {
     public Maybe<AccountInfo> getAccountById(String accountId) {
         return Flowable.fromPublisher(
                 webClient.get()
-                        .uri("/{id}", accountId)
+                        .uri("/api/v1/accounts/{id}", accountId)
                         .retrieve()
                         .onStatus(status -> status.equals(HttpStatus.NOT_FOUND), 
                                 response -> Mono.error(new AccountNotFoundException("Account not found: " + accountId)))
@@ -44,7 +44,7 @@ public class AccountWebClientAdapter implements AccountValidationPort {
     public Single<Boolean> updateAccountBalance(String accountId, BigDecimal newBalance) {
         return Flowable.fromPublisher(
                 webClient.put()
-                        .uri("/{id}/balance", accountId)
+                        .uri("/api/v1/accounts/{id}/balance", accountId)
                         .bodyValue(newBalance)
                         .retrieve()
                         .onStatus(status -> status.equals(HttpStatus.NOT_FOUND),
