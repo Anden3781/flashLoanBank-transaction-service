@@ -8,9 +8,12 @@ import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.core.Single;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping("/api/v1/transactions")
@@ -47,10 +50,25 @@ public class TransactionController {
   }
 
   @GetMapping("/account/{accountId}")
-  public Flowable<TransactionResponseDto> getTransactionsByAccountId(@PathVariable String accountId) {
-      return service.getTransactionsByAccountId(accountId)
-              .map(this::mapToResponse);
-  }
+    public Flowable<TransactionResponseDto> getTransactionsByAccountId(@PathVariable String accountId) {
+        return service.getTransactionsByAccountId(accountId)
+                .map(this::mapToResponse);
+    }
+
+    @GetMapping("/report/account/{accountId}")
+    public Flowable<TransactionResponseDto> getReportByDateRange(
+            @PathVariable String accountId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
+        return service.getReportByDateRange(accountId, startDate, endDate)
+                .map(this::mapToResponse);
+    }
+
+    @GetMapping("/report/last-ten/{accountId}")
+    public Flowable<TransactionResponseDto> getLastTenMovements(@PathVariable String accountId) {
+        return service.getLastTenMovements(accountId)
+                .map(this::mapToResponse);
+    }
 
   @DeleteMapping("/{id}")
   public Single<ResponseEntity<Void>> deleteTransaction(@PathVariable String id) {

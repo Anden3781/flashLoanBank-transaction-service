@@ -46,6 +46,15 @@ public class TransactionManagementService {
                 .toSingle();
     }
 
+    public Flowable<Transaction> getReportByDateRange(String accountId, LocalDateTime start, LocalDateTime end) {
+        return transactionRepository.findByAccountIdAndDateRange(accountId, start, end);
+    }
+
+    public Flowable<Transaction> getLastTenMovements(String accountId) {
+        return transactionRepository.findByAccountId(accountId)
+                .take(10);
+    }
+
     public Single<Transaction> fallbackExecuteTransaction(TransactionRequest command, Throwable t) {
         log.error("Circuit breaker active for executeTransaction: {}", t.getMessage());
         return Single.error(new RuleViolationException("Servicio temporalmente no disponible, reintente en unos segundos"));

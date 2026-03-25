@@ -5,7 +5,10 @@ import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
 
+import java.time.LocalDateTime;
+
 @Repository
 public interface ReactiveTransactionMongoRepository extends ReactiveMongoRepository<TransactionEntity, String> {
     Flux<TransactionEntity> findByAccountIdOrderByTimestampDesc(String accountId);
+    Flux<TransactionEntity> findByAccountIdAndTimestampBetweenOrderByTimestampDesc(String accountId, LocalDateTime start, LocalDateTime end);
 }

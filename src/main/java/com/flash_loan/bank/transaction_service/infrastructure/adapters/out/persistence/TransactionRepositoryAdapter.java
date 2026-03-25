@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+
 @Component
 @Primary
 @RequiredArgsConstructor
@@ -26,6 +28,12 @@ public class TransactionRepositoryAdapter implements TransactionRepositoryPort {
     @Override
     public Flowable<Transaction> findByAccountId(String accountId) {
         return Flowable.fromPublisher(repository.findByAccountIdOrderByTimestampDesc(accountId))
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public Flowable<Transaction> findByAccountIdAndDateRange(String accountId, LocalDateTime start, LocalDateTime end) {
+        return Flowable.fromPublisher(repository.findByAccountIdAndTimestampBetweenOrderByTimestampDesc(accountId, start, end))
                 .map(mapper::toDomain);
     }
 
