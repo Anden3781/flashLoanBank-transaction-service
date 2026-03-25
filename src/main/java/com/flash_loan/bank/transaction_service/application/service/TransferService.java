@@ -48,9 +48,10 @@ public class TransferService {
         Single<AccountInfo> targetSingle = resolveAccount(request.getTargetAccountId(), "Target");
 
         return Single.zip(sourceSingle, targetSingle, this::validateAndPair)
-                .flatMap(pair -> executeDebit(pair[0], request.getAmount(), transferId)
-                        .flatMap(debitTx -> executeCredit(pair[1], request.getAmount(), transferId)
-                                .onErrorResumeNext(err -> compensate(pair[0], request.getAmount(), transferId, err))
+                .flatMap(pair -> executeDebit(pair[0].getId(), request.getAmount(), transferId)
+                        .flatMap(debitTx -> executeCredit(pair[1].getId(), request.getAmount(), transferId)
+                                .onErrorResumeNext(error ->
+                                        compensate(pair[0].getId(), request.getAmount(), transferId, error))
                                 .map(creditTx -> TransferResponse.builder()
                                         .sourceTransaction(debitTx)
                                         .targetTransaction(creditTx)
@@ -84,38 +85,42 @@ public class TransferService {
         return new AccountInfo[]{source, target};
     }
 
-    /** Debits the source account and persists the TRANSFER_OUT record. */
-    private Single<Transaction> executeDebit(AccountInfo source, BigDecimal amount, String transferId) {
-        BigDecimal newBalance = source.getBalance().subtract(amount);
-        boolean insufficient = newBalance.compareTo(BigDecimal.ZERO) < 0;
-        return Single.just(insufficient)
-                .flatMap(isInsufficient -> isInsufficient
-                        ? Single.error(new RuleViolationException(
-                                "Insufficient funds. Available: " + source.getBalance() + ", Requested: " + amount))
-                        : accountPort.updateAccountBalance(source.getId(), newBalance))
-                .flatMap(success -> transactionRepository.save(buildTx(
-                        source.getId(), transferId, amount, TransactionType.TRANSFER_OUT, newBalance)));
+    /** Debits source account atomically and persists TRANSFER_OUT record. */
+    private Single<Transaction> executeDebit(String sourceAccountId, BigDecimal amount, String transferId) {
+        return accountPort.applyDebit(sourceAccountId, amount, transferId)
+                .flatMap(updatedAccount -> transactionRepository.save(buildTx(
+                        sourceAccountId,
+                        transferId,
+                        amount,
+                        TransactionType.TRANSFER_OUT,
+                        updatedAccount.getBalance())));
     }
 
-    /** Credits the target account and persists the TRANSFER_IN record. */
-    private Single<Transaction> executeCredit(AccountInfo target, BigDecimal amount, String transferId) {
-        BigDecimal newBalance = target.getBalance().add(amount);
-        return accountPort.updateAccountBalance(target.getId(), newBalance)
-                .flatMap(success -> transactionRepository.save(buildTx(
-                        target.getId(), transferId, amount, TransactionType.TRANSFER_IN, newBalance)));
+    /** Credits target account atomically and persists TRANSFER_IN record. */
+    private Single<Transaction> executeCredit(String targetAccountId, BigDecimal amount, String transferId) {
+        return accountPort.applyCredit(targetAccountId, amount, transferId)
+                .flatMap(updatedAccount -> transactionRepository.save(buildTx(
+                        targetAccountId,
+                        transferId,
+                        amount,
+                        TransactionType.TRANSFER_IN,
+                        updatedAccount.getBalance())));
     }
 
     /**
      * Compensating action: reverts the debit if the credit leg fails.
      * Marks the source transaction as FAILED for audit traceability.
      */
-    private Single<Transaction> compensate(AccountInfo source, BigDecimal amount,
-                                            String transferId, Throwable error) {
+    private Single<Transaction> compensate(String sourceAccountId, BigDecimal amount,
+                                           String transferId, Throwable error) {
         log.error("Credit leg failed for transfer {}. Initiating compensating reversal.", transferId, error);
-        return accountPort.updateAccountBalance(source.getId(), source.getBalance())
-                .flatMap(ok -> transactionRepository.save(buildTx(
-                        source.getId(), transferId, amount, TransactionType.TRANSFER_OUT, source.getBalance())
-                        .toBuilder().status(TransactionStatus.FAILED).build()))
+        return accountPort.applyCredit(sourceAccountId, amount, transferId + "-compensation")
+                .flatMap(updatedSource -> transactionRepository.save(buildTx(
+                        sourceAccountId,
+                        transferId,
+                        amount,
+                        TransactionType.TRANSFER_OUT,
+                        updatedSource.getBalance()).toBuilder().status(TransactionStatus.FAILED).build()))
                 .flatMap(saved -> Single.error(new RuntimeException(
                         "Transfer " + transferId + " FAILED. Compensating reversal applied. Cause: "
                                 + error.getMessage())));

@@ -46,7 +46,7 @@ public class TransactionController {
               .map(ResponseEntity::ok);
   }
 
-  @GetMapping("/{accountId}")
+  @GetMapping("/account/{accountId}")
   public Flowable<TransactionResponseDto> getTransactionsByAccountId(@PathVariable String accountId) {
       return service.getTransactionsByAccountId(accountId)
               .map(this::mapToResponse);

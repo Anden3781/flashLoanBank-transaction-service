@@ -7,5 +7,6 @@ import java.math.BigDecimal;
 
 public interface AccountValidationPort {
     Maybe<AccountInfo> getAccountById(String accountId);
-    Single<Boolean> updateAccountBalance(String accountId, BigDecimal newBalance);
+    Single<AccountInfo> applyDebit(String accountId, BigDecimal amount, String transactionId);
+    Single<AccountInfo> applyCredit(String accountId, BigDecimal amount, String transactionId);
 }

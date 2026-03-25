@@ -80,15 +80,25 @@ public class TransactionManagementService {
     }
 
     private Single<Transaction> processRemoteUpdate(Transaction savedTx) {
-        return accountPort.updateAccountBalance(savedTx.getAccountId(), savedTx.getResultingBalance())
-                .filter(success -> success)
-                .flatMap(success -> transactionRepository.save(savedTx.toBuilder().status(TransactionStatus.SUCCESS).build()).toMaybe())
-                .switchIfEmpty(markAsFailed(savedTx, "Remote balance update rejected by account-service").toMaybe())
-                .toSingle()
+        return executeAtomicOperation(savedTx)
+                .flatMap(updatedAccount -> transactionRepository.save(savedTx.toBuilder()
+                        .resultingBalance(updatedAccount.getBalance())
+                        .status(TransactionStatus.SUCCESS)
+                        .build()))
                 .onErrorResumeNext(error -> {
                     log.error("Distributed Transaction Failed. Executing Compensating Action for Transaction: {}", savedTx.getId(), error);
                     return markAsFailed(savedTx, error.getMessage());
                 });
+    }
+
+    private Single<AccountInfo> executeAtomicOperation(Transaction savedTx) {
+        String transactionId = savedTx.getId() == null ? "tx-" + System.nanoTime() : savedTx.getId();
+        if (savedTx.getType() == TransactionType.DEPOSIT) {
+            BigDecimal netCredit = savedTx.getAmount().subtract(savedTx.getFeeApplied());
+            return accountPort.applyCredit(savedTx.getAccountId(), netCredit, transactionId);
+        }
+        BigDecimal totalDebit = savedTx.getAmount().add(savedTx.getFeeApplied());
+        return accountPort.applyDebit(savedTx.getAccountId(), totalDebit, transactionId);
     }
 
     public Flowable<Transaction> findAll() {

@@ -7,5 +7,5 @@ import reactor.core.publisher.Flux;
 
 @Repository
 public interface ReactiveTransactionMongoRepository extends ReactiveMongoRepository<TransactionEntity, String> {
-    Flux<TransactionEntity> findByAccountId(String accountId);
+    Flux<TransactionEntity> findByAccountIdOrderByTimestampDesc(String accountId);
 }

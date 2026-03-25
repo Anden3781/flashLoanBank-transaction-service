@@ -25,7 +25,7 @@ public class TransactionRepositoryAdapter implements TransactionRepositoryPort {
 
     @Override
     public Flowable<Transaction> findByAccountId(String accountId) {
-        return Flowable.fromPublisher(repository.findByAccountId(accountId))
+        return Flowable.fromPublisher(repository.findByAccountIdOrderByTimestampDesc(accountId))
                 .map(mapper::toDomain);
     }
 
