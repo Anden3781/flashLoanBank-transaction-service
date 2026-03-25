@@ -6,6 +6,6 @@ import io.reactivex.rxjava3.core.Single;
 import java.math.BigDecimal;
 
 public interface AccountValidationPort {
-    Maybe<AccountInfo> getAccount(String accountId);
-    Single<Boolean> updateBalance(String accountId, BigDecimal newBalance);
+    Maybe<AccountInfo> getAccountById(String accountId);
+    Single<Boolean> updateAccountBalance(String accountId, BigDecimal newBalance);
 }

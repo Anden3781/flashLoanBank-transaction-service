@@ -1,1 +1,20 @@
-spring.application.name=transaction-service
+server:
+  port: 8084
+
+spring:
+  application:
+    name: transaction-service
+  cloud:
+    config:
+      enabled: false
+  data:
+    mongodb:
+      uri: mongodb://root:rootpassword@localhost:27017/transaction_db?authSource=admin
+      auto-index-creation: true
+
+# Puertos de los hermanos para la comunicación interna
+services:
+  account:
+    url: http://localhost:8082
+  customer:
+    url: http://localhost:8081
