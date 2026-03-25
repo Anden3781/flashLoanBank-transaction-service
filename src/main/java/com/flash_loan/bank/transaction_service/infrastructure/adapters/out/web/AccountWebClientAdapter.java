@@ -1,4 +1,4 @@
-package com.flash_loan.bank.transaction_service.infrastructure.adapter.out.web;
+package com.flash_loan.bank.transaction_service.infrastructure.adapters.out.web;
 
 import com.flash_loan.bank.transaction_service.domain.exception.AccountNotFoundException;
 import com.flash_loan.bank.transaction_service.domain.model.AccountInfo;

@@ -8,6 +8,7 @@ import io.reactivex.rxjava3.core.Single;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -18,13 +19,13 @@ public class MockAccountValidationAdapter implements AccountValidationPort {
 
     public MockAccountValidationAdapter() {
         // Mock data population
-        db.put("AC-SAVINGS-1", AccountInfo.builder().id("AC-SAVINGS-1").balance(new BigDecimal("1000.00")).type(AccountType.SAVINGS).maxMonthlyMovements(3).currentMovements(3).build());
+        db.put("AC-SAVINGS-1", AccountInfo.builder().id("AC-SAVINGS-1").balance(new BigDecimal("1000.00")).type(AccountType.SAVINGS).maxMonthlyMovements(3).currentMovements(0).build());
         db.put("AC-CHECKING-1", AccountInfo.builder().id("AC-CHECKING-1").balance(new BigDecimal("5000.00")).type(AccountType.CHECKING).build());
-        db.put("AC-FIXED-1", AccountInfo.builder().id("AC-FIXED-1").balance(new BigDecimal("10000.00")).type(AccountType.FIXED_TERM).allowedTransactionDay(15).build());
+        db.put("AC-FIXED-1", AccountInfo.builder().id("AC-FIXED-1").balance(new BigDecimal("10000.00")).type(AccountType.FIXED_TERM).allowedTransactionDay(LocalDateTime.now().getDayOfMonth()).build());
     }
 
     @Override
-    public Maybe<AccountInfo> getAccount(String accountId) {
+    public Maybe<AccountInfo> getAccountById(String accountId) {
         if (db.containsKey(accountId)) {
             return Maybe.just(db.get(accountId));
         }
@@ -32,11 +33,9 @@ public class MockAccountValidationAdapter implements AccountValidationPort {
     }
 
     @Override
-    public Single<Boolean> updateBalance(String accountId, BigDecimal newBalance) {
+    public Single<Boolean> updateAccountBalance(String accountId, BigDecimal newBalance) {
         return Single.defer(() -> {
             if (db.containsKey(accountId)) {
-                // Simulate an external network failure occasionally or explicitly here 
-                // if we want to test SAGA rollbacks.
                 db.get(accountId).setBalance(newBalance);
                 return Single.just(true);
             }
