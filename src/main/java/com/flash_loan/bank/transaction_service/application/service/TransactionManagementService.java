@@ -10,6 +10,8 @@ import com.flash_loan.bank.transaction_service.domain.model.TransactionStatus;
 import com.flash_loan.bank.transaction_service.domain.model.TransactionType;
 import com.flash_loan.bank.transaction_service.domain.ports.out.AccountValidationPort;
 import com.flash_loan.bank.transaction_service.domain.ports.out.TransactionRepositoryPort;
+import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.core.Maybe;
 import io.reactivex.rxjava3.core.Single;
 import lombok.RequiredArgsConstructor;
@@ -31,12 +33,9 @@ public class TransactionManagementService {
     private static final BigDecimal SAVINGS_LIMIT_FEE = new BigDecimal("5.00");
 
     public Single<Transaction> executeTransaction(TransactionRequest command) {
-        // 1. Fetch & Validate existence
         return accountPort.getAccountById(command.getAccountId())
                 .switchIfEmpty(Maybe.error(new AccountNotFoundException("Account does not exist: " + command.getAccountId())))
                 .toSingle()
-                
-                // 2. Validate Business Rules
                 .flatMap(account -> {
                     if (account.getType() == AccountType.FIXED_TERM) {
                         int expectedDay = account.getAllowedTransactionDay();
@@ -47,12 +46,8 @@ public class TransactionManagementService {
                     }
                     return Single.just(account);
                 })
-                
-                // 3. Calculate Fees and Check Funds
                 .flatMap(account -> {
                     BigDecimal fee = calculateFee(account);
-                    
-                    // Balance impact: for DEPOSIT, it's (+amount - fee). For WITHDRAWAL, it's (-amount - fee).
                     BigDecimal impact = command.getType() == TransactionType.DEPOSIT
                             ? command.getAmount().subtract(fee)
                             : command.getAmount().negate().subtract(fee);
@@ -75,17 +70,12 @@ public class TransactionManagementService {
 
                     return Single.just(tx);
                 })
-                
-                // 4. Persist (Local Transaction - PENDING)
                 .flatMap(transactionRepository::save)
-                
-                // 5. Update (Remote Account-Service) and Finalize (SAGA logic)
                 .flatMap(savedTx -> accountPort.updateAccountBalance(savedTx.getAccountId(), savedTx.getResultingBalance())
                         .flatMap(success -> {
                             if (!success) {
                                 return markAsFailed(savedTx, "Remote balance update rejected by account-service");
                             }
-                            // SUCCESS: Mark as SUCCESS and return
                             return transactionRepository.save(savedTx.toBuilder().status(TransactionStatus.SUCCESS).build());
                         })
                         .onErrorResumeNext(error -> {
@@ -93,6 +83,29 @@ public class TransactionManagementService {
                             return markAsFailed(savedTx, error.getMessage());
                         })
                 );
+    }
+
+    public Flowable<Transaction> findAll() {
+        return transactionRepository.findAll();
+    }
+
+    public Single<Transaction> findById(String id) {
+        return transactionRepository.findById(id)
+                .switchIfEmpty(Single.error(new RuleViolationException("Transaction not found: " + id)));
+    }
+
+    public Flowable<Transaction> getTransactionsByAccountId(String accountId) {
+        return transactionRepository.findByAccountId(accountId);
+    }
+
+    public Completable deleteTransaction(String id) {
+        return transactionRepository.deleteById(id)
+                .flatMapCompletable(success -> {
+                    if (!success) {
+                        return Completable.error(new RuleViolationException("Transaction not found for deletion: " + id));
+                    }
+                    return Completable.complete();
+                });
     }
 
     private BigDecimal calculateFee(AccountInfo account) {

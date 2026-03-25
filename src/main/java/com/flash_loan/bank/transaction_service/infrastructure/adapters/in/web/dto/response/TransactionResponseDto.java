@@ -1,5 +1,6 @@
 package com.flash_loan.bank.transaction_service.infrastructure.adapters.in.web.dto.response;
 
+import com.flash_loan.bank.transaction_service.domain.model.TransactionStatus;
 import com.flash_loan.bank.transaction_service.domain.model.TransactionType;
 import lombok.Builder;
 import lombok.Data;
@@ -16,4 +17,5 @@ public class TransactionResponseDto {
     private TransactionType type;
     private LocalDateTime timestamp;
     private BigDecimal resultingBalance;
+    private TransactionStatus status;
 }
