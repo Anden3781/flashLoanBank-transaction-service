@@ -1,20 +1,25 @@
 package com.flash_loan.bank.transaction_service.application.service;
 
 import com.flash_loan.bank.transaction_service.application.dto.TransactionRequest;
+import com.flash_loan.bank.transaction_service.domain.exception.AccountNotFoundException;
 import com.flash_loan.bank.transaction_service.domain.exception.RuleViolationException;
+import com.flash_loan.bank.transaction_service.domain.model.AccountInfo;
 import com.flash_loan.bank.transaction_service.domain.model.AccountType;
 import com.flash_loan.bank.transaction_service.domain.model.Transaction;
+import com.flash_loan.bank.transaction_service.domain.model.TransactionStatus;
 import com.flash_loan.bank.transaction_service.domain.model.TransactionType;
 import com.flash_loan.bank.transaction_service.domain.ports.out.AccountValidationPort;
 import com.flash_loan.bank.transaction_service.domain.ports.out.TransactionRepositoryPort;
 import io.reactivex.rxjava3.core.Maybe;
 import io.reactivex.rxjava3.core.Single;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TransactionManagementService {
@@ -26,12 +31,12 @@ public class TransactionManagementService {
     private static final BigDecimal SAVINGS_LIMIT_FEE = new BigDecimal("5.00");
 
     public Single<Transaction> executeTransaction(TransactionRequest command) {
-        // 1. Fetch
-        return accountPort.getAccount(command.getAccountId())
-                .switchIfEmpty(Maybe.error(new RuleViolationException("Account does not exist")))
+        // 1. Fetch & Validate existence
+        return accountPort.getAccountById(command.getAccountId())
+                .switchIfEmpty(Maybe.error(new AccountNotFoundException("Account does not exist: " + command.getAccountId())))
                 .toSingle()
                 
-                // 2. Validate Rules
+                // 2. Validate Business Rules
                 .flatMap(account -> {
                     if (account.getType() == AccountType.FIXED_TERM) {
                         int expectedDay = account.getAllowedTransactionDay();
@@ -45,16 +50,8 @@ public class TransactionManagementService {
                 
                 // 3. Calculate Fees and Check Funds
                 .flatMap(account -> {
-                    BigDecimal fee = BigDecimal.ZERO;
+                    BigDecimal fee = calculateFee(account);
                     
-                    if (account.getType() == AccountType.CHECKING) {
-                        fee = CHECKING_FEE;
-                    } else if (account.getType() == AccountType.SAVINGS) {
-                        if (account.getCurrentMovements() != null && account.getCurrentMovements() >= account.getMaxMonthlyMovements()) {
-                            fee = SAVINGS_LIMIT_FEE;
-                        }
-                    }
-
                     // Balance impact: for DEPOSIT, it's (+amount - fee). For WITHDRAWAL, it's (-amount - fee).
                     BigDecimal impact = command.getType() == TransactionType.DEPOSIT
                             ? command.getAmount().subtract(fee)
@@ -63,7 +60,7 @@ public class TransactionManagementService {
                     BigDecimal newBalance = account.getBalance().add(impact);
 
                     if (newBalance.compareTo(BigDecimal.ZERO) < 0) {
-                        return Single.error(new RuleViolationException("Insufficient funds after applying fees"));
+                        return Single.error(new RuleViolationException("Insufficient funds after applying fees (Resulting Balance: " + newBalance + ")"));
                     }
 
                     Transaction tx = Transaction.builder()
@@ -73,38 +70,44 @@ public class TransactionManagementService {
                             .type(command.getType())
                             .timestamp(LocalDateTime.now())
                             .resultingBalance(newBalance)
+                            .status(TransactionStatus.PENDING)
                             .build();
 
                     return Single.just(tx);
                 })
                 
-                // 4. Persist (Local Transaction)
+                // 4. Persist (Local Transaction - PENDING)
                 .flatMap(transactionRepository::save)
                 
-                // 5. Update (Remote Account-Service) y Distributed Transaction atomicity (SAGA logic)
-                .flatMap(tx -> accountPort.updateBalance(tx.getAccountId(), tx.getResultingBalance())
+                // 5. Update (Remote Account-Service) and Finalize (SAGA logic)
+                .flatMap(savedTx -> accountPort.updateAccountBalance(savedTx.getAccountId(), savedTx.getResultingBalance())
                         .flatMap(success -> {
                             if (!success) {
-                                return Single.error(new RuntimeException("Remote balance update rejected."));
+                                return markAsFailed(savedTx, "Remote balance update rejected by account-service");
                             }
-                            return Single.just(tx);
+                            // SUCCESS: Mark as SUCCESS and return
+                            return transactionRepository.save(savedTx.toBuilder().status(TransactionStatus.SUCCESS).build());
                         })
-                        
-                        // SAGA PATTERN: Compensating Transaction logic if Step 5 fails
                         .onErrorResumeNext(error -> {
-                            /**
-                             * [ATOMICITY IN MICROSERVICES]
-                             * If the remote update fails or times out, the local MongoDB already persisted the transaction!
-                             * This creates an inconsistency. 
-                             * Here we apply the Compensating Transaction of the SAGA Pattern:
-                             * 1. Revert the local transaction state to 'FAILED'.
-                             *    (We would need a status field in Transaction model and save it here).
-                             * 2. Log exactly what failed.
-                             * 3. Finally, propagate the error up so the API returns 500 to the client.
-                             */
-                            // Pendent: transactionRepository.markAsFailed(tx.getId()) // Compensating action
-                            return Single.error(new RuntimeException("Distributed Transaction Failed. The local record must be marked as FAILED. Caused by: " + error.getMessage()));
+                            log.error("Distributed Transaction Failed. Executing Compensating Action for Transaction: {}", savedTx.getId(), error);
+                            return markAsFailed(savedTx, error.getMessage());
                         })
                 );
+    }
+
+    private BigDecimal calculateFee(AccountInfo account) {
+        if (account.getType() == AccountType.CHECKING) {
+            return CHECKING_FEE;
+        } else if (account.getType() == AccountType.SAVINGS) {
+            if (account.getCurrentMovements() != null && account.getCurrentMovements() >= account.getMaxMonthlyMovements()) {
+                return SAVINGS_LIMIT_FEE;
+            }
+        }
+        return BigDecimal.ZERO;
+    }
+
+    private Single<Transaction> markAsFailed(Transaction tx, String reason) {
+        return transactionRepository.save(tx.toBuilder().status(TransactionStatus.FAILED).build())
+                .flatMap(failedTx -> Single.error(new RuntimeException("Distributed Transaction Failed. Local record marked as FAILED. Reason: " + reason)));
     }
 }

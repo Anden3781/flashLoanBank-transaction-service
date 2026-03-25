@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 public class Transaction {
@@ -20,4 +20,5 @@ public class Transaction {
     private TransactionType type;
     private LocalDateTime timestamp;
     private BigDecimal resultingBalance;
+    private TransactionStatus status;
 }
