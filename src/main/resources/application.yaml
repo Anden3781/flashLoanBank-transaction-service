@@ -1,31 +1,5 @@
-server:
-  port: 8084
-
 spring:
   application:
     name: transaction-service
-  cloud:
-    config:
-      enabled: false
-  data:
-    mongodb:
-      uri: mongodb://localhost:27017/transaction_db
-      auto-index-creation: true
-
-# Puertos de los hermanos para la comunicación interna
-services:
-  account:
-    url: http://localhost:8082
-  customer:
-    url: http://localhost:8081
-
-eureka:
-  client:
-    serviceUrl:
-      defaultZone: http://localhost:8761/eureka/
-
-springdoc:
-  api-docs:
-    path: /v3/api-docs
-  swagger-ui:
-    path: /swagger-ui.html
+  config:
+    import: "optional:configserver:http://localhost:8888"
