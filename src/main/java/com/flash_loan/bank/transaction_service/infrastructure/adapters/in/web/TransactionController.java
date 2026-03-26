@@ -12,9 +12,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @RestController
@@ -22,36 +28,36 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class TransactionController {
 
-  private final TransactionManagementService service;
+    private final TransactionManagementService service;
 
-  @PostMapping
-  public Single<ResponseEntity<TransactionResponseDto>> executeTransaction(
-          @Valid @RequestBody TransactionRequestDto dto) {
-      
-      TransactionRequest command = new TransactionRequest();
-      command.setAccountId(dto.getAccountId());
-      command.setAmount(dto.getAmount());
-      command.setType(dto.getType());
+    @PostMapping
+    public Single<ResponseEntity<TransactionResponseDto>> executeTransaction(
+            @Valid @RequestBody TransactionRequestDto dto) {
 
-      return service.executeTransaction(command)
-              .map(this::mapToResponse)
-              .map(response -> ResponseEntity.status(HttpStatus.CREATED).body(response));
-  }
+        TransactionRequest command = new TransactionRequest();
+        command.setAccountId(dto.getAccountId());
+        command.setAmount(dto.getAmount());
+        command.setType(dto.getType());
 
-  @GetMapping
-  public Flowable<TransactionResponseDto> getAllTransactions() {
-      return service.findAll()
-              .map(this::mapToResponse);
-  }
+        return service.executeTransaction(command)
+                .map(this::mapToResponse)
+                .map(response -> ResponseEntity.status(HttpStatus.CREATED).body(response));
+    }
 
-  @GetMapping("/id/{id}")
-  public Single<ResponseEntity<TransactionResponseDto>> getTransactionById(@PathVariable String id) {
-      return service.findById(id)
-              .map(this::mapToResponse)
-              .map(ResponseEntity::ok);
-  }
+    @GetMapping
+    public Flowable<TransactionResponseDto> getAllTransactions() {
+        return service.findAll()
+                .map(this::mapToResponse);
+    }
 
-  @GetMapping("/account/{accountId}")
+    @GetMapping("/id/{id}")
+    public Single<ResponseEntity<TransactionResponseDto>> getTransactionById(@PathVariable String id) {
+        return service.findById(id)
+                .map(this::mapToResponse)
+                .map(ResponseEntity::ok);
+    }
+
+    @GetMapping("/account/{accountId}")
     public Flowable<TransactionResponseDto> getTransactionsByAccountId(@PathVariable String accountId) {
         return service.getTransactionsByAccountId(accountId)
                 .map(this::mapToResponse);
@@ -72,31 +78,31 @@ public class TransactionController {
                 .map(this::mapToResponse);
     }
 
-  @PostMapping("/transfer")
-  public Single<ResponseEntity<TransactionResponseDto>> transfer(
-          @Valid @RequestBody TransferRequestDto dto) {
-      return service.transfer(dto.getSourceAccountId(), dto.getTargetAccountId(), dto.getAmount())
-              .map(this::mapToResponse)
-              .map(ResponseEntity::ok);
-  }
+    @PostMapping("/transfer")
+    public Single<ResponseEntity<TransactionResponseDto>> transfer(
+            @Valid @RequestBody TransferRequestDto dto) {
+        return service.transfer(dto.getSourceAccountId(), dto.getTargetAccountId(), dto.getAmount())
+                .map(this::mapToResponse)
+                .map(ResponseEntity::ok);
+    }
 
-  @DeleteMapping("/{id}")
-  public Single<ResponseEntity<Void>> deleteTransaction(@PathVariable String id) {
-      return service.deleteTransaction(id)
-              .toSingleDefault(ResponseEntity.status(HttpStatus.NO_CONTENT).<Void>build())
-              .onErrorReturn(error -> ResponseEntity.notFound().build());
-  }
+    @DeleteMapping("/{id}")
+    public Single<ResponseEntity<Void>> deleteTransaction(@PathVariable String id) {
+        return service.deleteTransaction(id)
+                .toSingleDefault(ResponseEntity.status(HttpStatus.NO_CONTENT).<Void>build())
+                .onErrorReturn(error -> ResponseEntity.notFound().build());
+    }
 
-  private TransactionResponseDto mapToResponse(com.flash_loan.bank.transaction_service.domain.model.Transaction tx) {
-      return TransactionResponseDto.builder()
-              .id(tx.getId())
-              .accountId(tx.getAccountId())
-              .amount(tx.getAmount())
-              .feeApplied(tx.getFeeApplied())
-              .type(tx.getType())
-              .timestamp(tx.getTimestamp())
-              .resultingBalance(tx.getResultingBalance())
-              .status(tx.getStatus())
-              .build();
-  }
+    private TransactionResponseDto mapToResponse(com.flash_loan.bank.transaction_service.domain.model.Transaction tx) {
+        return TransactionResponseDto.builder()
+                .id(tx.getId())
+                .accountId(tx.getAccountId())
+                .amount(tx.getAmount())
+                .feeApplied(tx.getFeeApplied())
+                .type(tx.getType())
+                .timestamp(tx.getTimestamp())
+                .resultingBalance(tx.getResultingBalance())
+                .status(tx.getStatus())
+                .build();
+    }
 }
