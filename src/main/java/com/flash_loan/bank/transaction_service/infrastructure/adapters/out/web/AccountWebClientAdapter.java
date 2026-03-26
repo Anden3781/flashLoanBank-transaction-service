@@ -23,7 +23,7 @@ public class AccountWebClientAdapter implements AccountValidationPort {
     private final WebClient webClient;
 
     public AccountWebClientAdapter(WebClient.Builder webClientBuilder,
-                                   @Value("${services.account.url:http://localhost:8082}") String baseUrl) {
+                                   @Value("${services.account.url:http://account-service:8082}") String baseUrl) {
         this.webClient = webClientBuilder.baseUrl(baseUrl).build();
     }
 

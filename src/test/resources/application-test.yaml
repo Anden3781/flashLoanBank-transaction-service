@@ -1,0 +1,18 @@
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/test_db
+  kafka:
+    bootstrap-servers: localhost:9092
+  config:
+    enabled: false
+
+services:
+  account:
+    url: http://localhost:8082
+  customer:
+    url: http://localhost:8081
+
+eureka:
+  client:
+    enabled: false
