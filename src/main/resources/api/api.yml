@@ -1,0 +1,203 @@
+openapi: 3.0.3
+info:
+  title: Transaction Service API - FlashLoan Bank
+  version: 1.0.0
+  description: API reactiva para la ejecución de transacciones (depósitos, retiros) y transferencias entre cuentas. Incluye reportes avanzados.
+
+servers:
+  - url: /api/v1/transactions
+    description: Transaction Service context path
+
+paths:
+  / :
+    post:
+      summary: Ejecutar una transacción (Depósito/Retiro)
+      operationId: executeTransaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionRequestDto'
+      responses:
+        '201':
+          description: Transacción ejecutada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponseDto'
+        '400':
+          description: Error de validación o fondos insuficientes
+
+    get:
+      summary: Listar todas las transacciones
+      operationId: getAllTransactions
+      responses:
+        '200':
+          description: Lista de transacciones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransactionResponseDto'
+
+  /transfer:
+    post:
+      summary: Realizar una transferencia entre cuentas
+      description: Implementa un patrón Saga reactivo para mover fondos entre dos cuentas.
+      operationId: transfer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequest'
+      responses:
+        '201':
+          description: Transferencia completada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+
+  /account/{accountId}:
+    get:
+      summary: Listar transacciones por ID de cuenta
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de transacciones de la cuenta
+
+  /report/account/{accountId}:
+    get:
+      summary: Reporte de movimientos por rango de fechas
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          example: "2023-01-01T00:00:00"
+        - name: endDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          example: "2023-12-31T23:59:59"
+      responses:
+        '200':
+          description: Lista de movimientos en el rango especificado
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransactionResponseDto'
+
+  /report/last-ten/{accountId}:
+    get:
+      summary: Obtener los últimos 10 movimientos de una cuenta
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Últimos 10 movimientos (orden descendente)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransactionResponseDto'
+
+components:
+  schemas:
+    TransactionRequestDto:
+      type: object
+      required:
+        - accountId
+        - amount
+        - type
+      properties:
+        accountId:
+          type: string
+          example: "ACC-123456"
+        amount:
+          type: number
+          format: decimal
+          example: 100.00
+        type:
+          type: string
+          enum: [DEPOSIT, WITHDRAWAL]
+
+    TransactionResponseDto:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "60f7c1b5e4b0a5a5a5a5a5a5"
+        accountId:
+          type: string
+          example: "ACC-123456"
+        amount:
+          type: number
+          format: decimal
+          example: 100.00
+        feeApplied:
+          type: number
+          format: decimal
+          example: 2.50
+        type:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        resultingBalance:
+          type: number
+          format: decimal
+          example: 1250.75
+        status:
+          type: string
+          enum: [PENDING, SUCCESS, FAILED]
+
+    TransferRequest:
+      type: object
+      required:
+        - sourceAccountId
+        - targetAccountId
+        - amount
+      properties:
+        sourceAccountId:
+          type: string
+          example: "ACC-SOURCE"
+        targetAccountId:
+          type: string
+          example: "ACC-TARGET"
+        amount:
+          type: number
+          format: decimal
+          example: 50.00
+
+    TransferResponse:
+      type: object
+      properties:
+        sourceTransaction:
+          $ref: '#/components/schemas/TransactionResponseDto'
+        targetTransaction:
+          $ref: '#/components/schemas/TransactionResponseDto'
