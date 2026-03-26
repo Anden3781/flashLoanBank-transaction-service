@@ -27,4 +27,5 @@ public class TransactionEntity {
     private LocalDateTime timestamp;
     private BigDecimal resultingBalance;
     private TransactionStatus status;
+    private String errorMessage;
 }

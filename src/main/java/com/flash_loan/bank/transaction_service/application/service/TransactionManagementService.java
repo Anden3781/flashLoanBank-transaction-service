@@ -89,14 +89,54 @@ public class TransactionManagementService {
     }
 
     private Single<Transaction> processRemoteUpdate(Transaction savedTx) {
-        return executeAtomicOperation(savedTx)
-                .flatMap(updatedAccount -> transactionRepository.save(savedTx.toBuilder()
-                        .resultingBalance(updatedAccount.getBalance())
-                        .status(TransactionStatus.SUCCESS)
-                        .build()))
-                .onErrorResumeNext(error -> {
-                    log.error("Distributed Transaction Failed. Executing Compensating Action for Transaction: {}", savedTx.getId(), error);
-                    return markAsFailed(savedTx, error.getMessage());
+        if (savedTx.getType() == TransactionType.DEPOSIT) {
+            return accountPort.applyCredit(savedTx.getAccountId(), savedTx.getAmount(), savedTx.getId())
+                    .flatMap(updatedAccount -> transactionRepository.save(savedTx.toBuilder()
+                            .resultingBalance(updatedAccount.getBalance())
+                            .status(TransactionStatus.SUCCESS)
+                            .build()))
+                    .onErrorResumeNext(error -> {
+                        log.error("Distributed Transaction Failed. Executing Compensating Action for Transaction: {}", savedTx.getId(), error);
+                        return markAsFailed(savedTx, error.getMessage());
+                    });
+        } else {
+            return accountPort.applyDebit(savedTx.getAccountId(), savedTx.getAmount(), savedTx.getId())
+                    .flatMap(updatedAccount -> transactionRepository.save(savedTx.toBuilder()
+                            .resultingBalance(updatedAccount.getBalance())
+                            .status(TransactionStatus.SUCCESS)
+                            .build()))
+                    .onErrorResumeNext(error -> {
+                        log.error("Distributed Transaction Failed. Executing Compensating Action for Transaction: {}", savedTx.getId(), error);
+                        return markAsFailed(savedTx, error.getMessage());
+                    });
+        }
+    }
+
+    public Single<Transaction> transfer(String sourceAccountId, String targetAccountId, BigDecimal amount) {
+        log.info("Starting transfer from {} to {} for amount {}", sourceAccountId, targetAccountId, amount);
+        
+        TransactionRequest debitRequest = new TransactionRequest();
+        debitRequest.setAccountId(sourceAccountId);
+        debitRequest.setAmount(amount);
+        debitRequest.setType(TransactionType.WITHDRAWAL);
+
+        return executeTransaction(debitRequest)
+                .flatMap(debitTx -> {
+                    if (debitTx.getStatus() != TransactionStatus.SUCCESS) {
+                        return Single.error(new RuleViolationException("Debit failed: " + debitTx.getErrorMessage()));
+                    }
+                    
+                    TransactionRequest creditRequest = new TransactionRequest();
+                    creditRequest.setAccountId(targetAccountId);
+                    creditRequest.setAmount(amount);
+                    creditRequest.setType(TransactionType.DEPOSIT);
+                    
+                    return executeTransaction(creditRequest)
+                            .onErrorResumeNext(error -> {
+                                log.error("Credit failed during transfer, rolling back debit for {}", sourceAccountId);
+                                return accountPort.applyCredit(sourceAccountId, amount, "ROLLBACK-" + debitTx.getId())
+                                        .flatMap(unused -> Single.error(new RuleViolationException("Transfer failed during credit phase, debit rolled back: " + error.getMessage())));
+                            });
                 });
     }
 

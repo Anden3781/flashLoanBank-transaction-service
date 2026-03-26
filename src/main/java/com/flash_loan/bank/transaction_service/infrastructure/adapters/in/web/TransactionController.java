@@ -3,6 +3,7 @@ package com.flash_loan.bank.transaction_service.infrastructure.adapters.in.web;
 import com.flash_loan.bank.transaction_service.application.dto.TransactionRequest;
 import com.flash_loan.bank.transaction_service.application.service.TransactionManagementService;
 import com.flash_loan.bank.transaction_service.infrastructure.adapters.in.web.dto.request.TransactionRequestDto;
+import com.flash_loan.bank.transaction_service.infrastructure.adapters.in.web.dto.request.TransferRequestDto;
 import com.flash_loan.bank.transaction_service.infrastructure.adapters.in.web.dto.response.TransactionResponseDto;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.core.Single;
@@ -13,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @RestController
@@ -69,6 +71,14 @@ public class TransactionController {
         return service.getLastTenMovements(accountId)
                 .map(this::mapToResponse);
     }
+
+  @PostMapping("/transfer")
+  public Single<ResponseEntity<TransactionResponseDto>> transfer(
+          @Valid @RequestBody TransferRequestDto dto) {
+      return service.transfer(dto.getSourceAccountId(), dto.getTargetAccountId(), dto.getAmount())
+              .map(this::mapToResponse)
+              .map(ResponseEntity::ok);
+  }
 
   @DeleteMapping("/{id}")
   public Single<ResponseEntity<Void>> deleteTransaction(@PathVariable String id) {

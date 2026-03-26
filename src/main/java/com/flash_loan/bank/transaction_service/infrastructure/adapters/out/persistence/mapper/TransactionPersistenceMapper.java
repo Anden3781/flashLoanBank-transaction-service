@@ -20,6 +20,7 @@ public class TransactionPersistenceMapper {
                         .timestamp(d.getTimestamp())
                         .resultingBalance(d.getResultingBalance())
                         .status(d.getStatus())
+                        .errorMessage(d.getErrorMessage())
                         .build())
                 .orElse(null);
     }
@@ -35,6 +36,7 @@ public class TransactionPersistenceMapper {
                         .timestamp(e.getTimestamp())
                         .resultingBalance(e.getResultingBalance())
                         .status(e.getStatus())
+                        .errorMessage(e.getErrorMessage())
                         .build())
                 .orElse(null);
     }
